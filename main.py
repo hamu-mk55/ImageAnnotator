@@ -3,59 +3,20 @@ import sys
 import os
 import shutil
 import csv
-import sqlite3
 
 import cv2
 
-from PySide2.QtWidgets import (
+from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QLabel, QPushButton, QListWidget,
     QVBoxLayout, QHBoxLayout, QFileDialog, QGraphicsView, QGraphicsScene,
     QGraphicsPixmapItem, QGraphicsRectItem, QSizePolicy, QComboBox, QTreeWidget,
     QTreeWidgetItem, QSplitter, QGridLayout, QInputDialog
 )
-from PySide2.QtGui import QPixmap, QImage, QPen, QColor
-from PySide2.QtCore import Qt, QRectF, QPointF, QEvent
+from PySide6.QtGui import QPixmap, QImage, QPen, QColor
+from PySide6.QtCore import Qt, QRectF, QPointF, QEvent
 
+from src.db import AnnotationDB
 
-
-class AnnotationDB:
-    def __init__(self, db_path):
-        self.conn = sqlite3.connect(db_path)
-        self.create_table()
-
-    def create_table(self):
-        self.conn.execute('''CREATE TABLE IF NOT EXISTS annotations (
-            image_path TEXT,
-            x REAL,
-            y REAL,
-            width REAL,
-            height REAL
-        )''')
-        self.conn.commit()
-
-    def save_annotation(self, image_path, rect):
-        self.conn.execute("INSERT INTO annotations (image_path, x, y, width, height) VALUES (?, ?, ?, ?, ?)",
-                          (image_path, rect.x(), rect.y(), rect.width(), rect.height()))
-        self.conn.commit()
-
-    def load_annotations(self, image_path):
-        cursor = self.conn.execute("SELECT x, y, width, height FROM annotations WHERE image_path=?", (image_path,))
-        return [QRectF(x, y, w, h) for x, y, w, h in cursor.fetchall()]
-
-    def delete_annotation(self, image_path, rect, tol=1.0):
-        self.conn.execute(
-            '''DELETE FROM annotations WHERE image_path=? AND
-               ABS(x - ?) < ? AND ABS(y - ?) < ? AND ABS(width - ?) < ? AND ABS(height - ?) < ?''',
-            (image_path, rect.x(), tol, rect.y(), tol, rect.width(), tol, rect.height(), tol)
-        )
-        self.conn.commit()
-
-    def export_to_csv(self, csv_path):
-        cursor = self.conn.execute("SELECT image_path, x, y, width, height FROM annotations")
-        with open(csv_path, "w", newline="") as f:
-            writer = csv.writer(f)
-            writer.writerow(["image_path", "x", "y", "width", "height"])
-            writer.writerows(cursor.fetchall())
 
 
 class Annotator(QMainWindow):
@@ -91,14 +52,18 @@ class Annotator(QMainWindow):
         self.load_button = QPushButton("Set image folder")
         self.load_button.clicked.connect(self.load_images)
 
-        self.export_button = QPushButton("Export CSV")
-        self.export_button.clicked.connect(self.export_csv)
+        self.export_button_anno = QPushButton("Export Annotations")
+        self.export_button_anno.clicked.connect(self.export_annotations)
+
+        self.export_button_label = QPushButton("Export Labels")
+        self.export_button_label.clicked.connect(self.export_labels)
 
         left_layout.addWidget(self.load_button)
         left_layout.addWidget(self.label_tree)
         left_layout.addWidget(self.add_label_button)
         left_layout.addWidget(self.toggle_button)
-        left_layout.addWidget(self.export_button)
+        left_layout.addWidget(self.export_button_label)
+        left_layout.addWidget(self.export_button_anno)
 
         left_widget = QWidget()
         left_widget.setLayout(left_layout)
@@ -112,10 +77,21 @@ class Annotator(QMainWindow):
         splitter.addWidget(self.image_view)
         self.setCentralWidget(splitter)
 
-    def export_csv(self):
+    def export_annotations(self):
         path, _ = QFileDialog.getSaveFileName(self, "Save CSV", "", "CSV files (*.csv)")
         if path:
             self.db.export_to_csv(path)
+
+    def export_labels(self):
+        path, _ = QFileDialog.getSaveFileName(self, "Save CSV", "", "CSV files (*.csv)")
+        if path:
+            with open(path, mode="w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow(["file_path", "label"])  # ヘッダー行
+                for label, img_paths in self.image_dict.items():
+                    for img_path in img_paths:
+                        img_path = os.path.basename(img_path)
+                        writer.writerow([img_path, label])
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key_Left:
@@ -206,6 +182,10 @@ class Annotator(QMainWindow):
         self.image_dict[old_label].remove(image_path)
         self.image_dict[new_label].append(new_path)
         self.populate_label_tree()
+
+        self.current_images = self.image_dict[old_label]
+        self.update_image_display()
+
         return new_path
 
 
@@ -330,13 +310,12 @@ class AnnotatableImageView(QGraphicsView):
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
-            self.start_point = self.mapToScene(event.pos())
+            self.start_point = self.mapToScene(event.position().toPoint())
         elif event.button() == Qt.RightButton:
-            pos = self.mapToScene(event.pos())
+            pos = self.mapToScene(event.position().toPoint())
             for rect_item in self.rect_items:
                 if rect_item.rect().contains(pos):
                     gui_rect = rect_item.rect()
-                    # GUI座標 → 元画像座標に変換
                     unscaled_rect = QRectF(
                         gui_rect.x() / self.scale_ratio,
                         gui_rect.y() / self.scale_ratio,
@@ -346,11 +325,14 @@ class AnnotatableImageView(QGraphicsView):
                     self.db.delete_annotation(self.image_path, unscaled_rect)
                     self.scene.removeItem(rect_item)
                     self.rect_items.remove(rect_item)
+
                     break
+
+        self.parent_window.image_view.setFocus()
 
     def mouseMoveEvent(self, event):
         if self.start_point:
-            end_point = self.mapToScene(event.pos())
+            end_point = self.mapToScene(event.position().toPoint())
             rect = QRectF(self.start_point, end_point).normalized()
             if hasattr(self, 'temp_rect') and self.temp_rect:
                 self.scene.removeItem(self.temp_rect)
@@ -360,10 +342,9 @@ class AnnotatableImageView(QGraphicsView):
 
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.LeftButton and hasattr(self, 'temp_rect'):
-            end_point = self.mapToScene(event.pos())
+            end_point = self.mapToScene(event.position().toPoint())
             rect = QRectF(self.start_point, end_point).normalized()
 
-            # GUI座標 → 元画像座標へ変換して保存
             unscaled_rect = QRectF(
                 rect.x() / self.scale_ratio,
                 rect.y() / self.scale_ratio,
@@ -383,4 +364,4 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = Annotator()
     window.show()
-    sys.exit(app.exec_())
+    sys.exit(app.exec())
