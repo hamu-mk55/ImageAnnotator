@@ -9,14 +9,13 @@ import cv2
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QLabel, QPushButton, QListWidget,
     QVBoxLayout, QHBoxLayout, QFileDialog, QGraphicsView, QGraphicsScene,
-    QGraphicsPixmapItem, QGraphicsRectItem, QSizePolicy, QComboBox, QTreeWidget,
+    QGraphicsPixmapItem, QGraphicsRectItem, QGraphicsSimpleTextItem, QSizePolicy, QComboBox, QTreeWidget,
     QTreeWidgetItem, QSplitter, QGridLayout, QInputDialog
 )
 from PySide6.QtGui import QPixmap, QImage, QPen, QColor
 from PySide6.QtCore import Qt, QRectF, QPointF, QEvent
 
 from src.db import AnnotationDB
-
 
 
 class Annotator(QMainWindow):
@@ -87,7 +86,7 @@ class Annotator(QMainWindow):
         if path:
             with open(path, mode="w", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f)
-                writer.writerow(["file_path", "label"])  # ヘッダー行
+                writer.writerow(["file_path", "label"])
                 for label, img_paths in self.image_dict.items():
                     for img_path in img_paths:
                         img_path = os.path.basename(img_path)
@@ -218,10 +217,11 @@ class ImageWithControls(QWidget):
         layout = QVBoxLayout()
         self.setLayout(layout)
 
-        # ヘッダー（ファイル名 + ラベル選択）
+        # header: filename, image-label
         header_layout = QHBoxLayout()
         file_name = os.path.basename(image_path)
         self.label = QLabel(file_name)
+
         self.combo = QComboBox()
         self.combo.addItems(label_list)
 
@@ -231,11 +231,26 @@ class ImageWithControls(QWidget):
 
         header_layout.addWidget(self.label)
         header_layout.addWidget(self.combo)
+
         layout.addLayout(header_layout)
+
+        # annotation
+        anno_layout = QHBoxLayout()
+        self.combo_anno = QComboBox()
+        self.combo_anno.addItems(label_list)
+
+        anno_layout.addWidget(QLabel("Annotation Label:"))
+        anno_layout.addWidget(self.combo_anno)
+
+        layout.addLayout(anno_layout)
 
         # 画像ビュー（アノテーション付き）
         self.image_view = AnnotatableImageView(parent_window.root_folder, parent_window, db)
         self.image_view.set_image(image_path)
+
+        self.image_view.get_current_anno_label = lambda: self.combo_anno.currentText()
+
+
         layout.addWidget(self.image_view)
 
     def on_label_changed(self, new_label):
@@ -243,6 +258,10 @@ class ImageWithControls(QWidget):
         new_path = self.parent_window.move_image_to_label(self.image_path, new_label)
         self.image_path = new_path
         self.image_view.set_image(new_path)
+
+        # アノテーションラベルの初期値も画像ラベルに合わせて切り替え
+        self.combo_anno.setCurrentText(new_label)
+
 
 class AnnotatableImageView(QGraphicsView):
     def __init__(self, root_folder, parent_window, db):
@@ -254,6 +273,8 @@ class AnnotatableImageView(QGraphicsView):
         self.rect_items = []
         self.start_point = None
         self.setMouseTracking(True)
+
+        self.get_current_anno_label = None
 
         self.root_folder = root_folder
         self.parent_window = parent_window
@@ -290,7 +311,7 @@ class AnnotatableImageView(QGraphicsView):
         self.load_annotations()
 
     def load_annotations(self):
-        for rect in self.db.load_annotations(self.image_path):
+        for rect, label in self.db.load_annotations(self.image_path):
             # 元画像座標 → GUI表示座標
             scaled_rect = QRectF(
                 rect.x() * self.scale_ratio,
@@ -301,7 +322,15 @@ class AnnotatableImageView(QGraphicsView):
             rect_item = QGraphicsRectItem(scaled_rect)
             rect_item.setPen(QPen(QColor("red"), 2))
             self.scene.addItem(rect_item)
-            self.rect_items.append(rect_item)
+
+            text_item = QGraphicsSimpleTextItem(label)
+            text_item.setPos(scaled_rect.x(), scaled_rect.y() - 15)
+            text_item.setBrush(QColor("blue"))
+            self.scene.addItem(text_item)
+
+
+
+            self.rect_items.append((rect_item, text_item))
 
     def resizeEvent(self, event):
         if self.pixmap_item and self.image_path:
@@ -313,7 +342,7 @@ class AnnotatableImageView(QGraphicsView):
             self.start_point = self.mapToScene(event.position().toPoint())
         elif event.button() == Qt.RightButton:
             pos = self.mapToScene(event.position().toPoint())
-            for rect_item in self.rect_items:
+            for rect_item, text_item in self.rect_items:
                 if rect_item.rect().contains(pos):
                     gui_rect = rect_item.rect()
                     unscaled_rect = QRectF(
@@ -322,9 +351,13 @@ class AnnotatableImageView(QGraphicsView):
                         gui_rect.width() / self.scale_ratio,
                         gui_rect.height() / self.scale_ratio
                     )
+
+                    rect_label = text_item.text()
+
                     self.db.delete_annotation(self.image_path, unscaled_rect)
                     self.scene.removeItem(rect_item)
-                    self.rect_items.remove(rect_item)
+                    self.scene.removeItem(text_item)
+                    self.rect_items.remove((rect_item, text_item))
 
                     break
 
@@ -352,9 +385,16 @@ class AnnotatableImageView(QGraphicsView):
                 rect.height() / self.scale_ratio
             )
 
-            self.db.save_annotation(self.image_path, unscaled_rect)
+            label = self.get_current_anno_label() if self.get_current_anno_label else self.parent_window.current_label
+            self.db.save_annotation(self.image_path, unscaled_rect, label)
 
-            self.rect_items.append(self.temp_rect)
+            # ラベル表示
+            text_item = QGraphicsSimpleTextItem(label)
+            text_item.setPos(rect.x(), rect.y() - 15)
+            text_item.setBrush(QColor("blue"))
+            self.scene.addItem(text_item)
+
+            self.rect_items.append((self.temp_rect, text_item))
             self.temp_rect = None
             self.start_point = None
             self.parent_window.image_view.setFocus()

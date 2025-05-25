@@ -18,18 +18,19 @@ class AnnotationDB:
             x REAL,
             y REAL,
             width REAL,
-            height REAL
+            height REAL,
+            rect_label TEXT
         )''')
         self.conn.commit()
 
-    def save_annotation(self, image_path, rect):
-        self.conn.execute("INSERT INTO annotations (image_path, x, y, width, height) VALUES (?, ?, ?, ?, ?)",
-                          (image_path, rect.x(), rect.y(), rect.width(), rect.height()))
+    def save_annotation(self, image_path, rect, rect_label):
+        self.conn.execute("INSERT INTO annotations (image_path, x, y, width, height, rect_label) VALUES (?, ?, ?, ?, ?, ?)",
+                          (image_path, rect.x(), rect.y(), rect.width(), rect.height(), rect_label))
         self.conn.commit()
 
     def load_annotations(self, image_path):
-        cursor = self.conn.execute("SELECT x, y, width, height FROM annotations WHERE image_path=?", (image_path,))
-        return [QRectF(x, y, w, h) for x, y, w, h in cursor.fetchall()]
+        cursor = self.conn.execute("SELECT x, y, width, height, rect_label FROM annotations WHERE image_path=?", (image_path,))
+        return [(QRectF(x, y, w, h), label) for x, y, w, h, label in cursor.fetchall()]
 
     def delete_annotation(self, image_path, rect, tol=1.0):
         self.conn.execute(
@@ -40,13 +41,13 @@ class AnnotationDB:
         self.conn.commit()
 
     def export_to_csv(self, csv_path):
-        cursor = self.conn.execute("SELECT image_path, x, y, width, height FROM annotations")
+        cursor = self.conn.execute("SELECT image_path, x, y, width, height, rect_label FROM annotations")
         with open(csv_path, "w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
-            writer.writerow(["image_path", "label", "x", "y", "width", "height"])
+            writer.writerow(["image_path", "label", "x", "y", "width", "height", "rect_label"])
             for row in cursor:
-                image_path, x, y, width, height = row
+                image_path, x, y, width, height, rect_label = row
                 base_name = os.path.basename(image_path)
                 label = os.path.basename(os.path.dirname(image_path))
 
-                writer.writerow([base_name, label, x, y, width, height])
+                writer.writerow([base_name, label, x, y, width, height, rect_label])
