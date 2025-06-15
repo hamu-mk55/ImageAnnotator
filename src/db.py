@@ -7,6 +7,7 @@ import sqlite3
 
 from PySide6.QtCore import QRectF
 
+
 class AnnotationDB:
     def __init__(self, db_path):
         self.conn = sqlite3.connect(db_path)
@@ -24,12 +25,14 @@ class AnnotationDB:
         self.conn.commit()
 
     def save_annotation(self, image_path, rect, rect_label):
-        self.conn.execute("INSERT INTO annotations (image_path, x, y, width, height, rect_label) VALUES (?, ?, ?, ?, ?, ?)",
-                          (image_path, rect.x(), rect.y(), rect.width(), rect.height(), rect_label))
+        self.conn.execute(
+            "INSERT INTO annotations (image_path, x, y, width, height, rect_label) VALUES (?, ?, ?, ?, ?, ?)",
+            (image_path, rect.x(), rect.y(), rect.width(), rect.height(), rect_label))
         self.conn.commit()
 
     def load_annotations(self, image_path):
-        cursor = self.conn.execute("SELECT x, y, width, height, rect_label FROM annotations WHERE image_path=?", (image_path,))
+        cursor = self.conn.execute("SELECT x, y, width, height, rect_label FROM annotations WHERE image_path=?",
+                                   (image_path,))
         return [(QRectF(x, y, w, h), label) for x, y, w, h, label in cursor.fetchall()]
 
     def delete_annotation(self, image_path, rect, tol=1.0):
@@ -38,6 +41,10 @@ class AnnotationDB:
                ABS(x - ?) < ? AND ABS(y - ?) < ? AND ABS(width - ?) < ? AND ABS(height - ?) < ?''',
             (image_path, rect.x(), tol, rect.y(), tol, rect.width(), tol, rect.height(), tol)
         )
+        self.conn.commit()
+
+    def delete_all_annotations(self, image_path):
+        self.conn.execute("DELETE FROM annotations WHERE image_path=?", (image_path,))
         self.conn.commit()
 
     def export_to_csv(self, csv_path):
