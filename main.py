@@ -57,10 +57,14 @@ class Annotator(QMainWindow):
         self.export_button_label = QPushButton("Export Labels")
         self.export_button_label.clicked.connect(self.export_labels)
 
+        self.clear_button = QPushButton("Clear Annotations")
+        self.clear_button.clicked.connect(self.clear_current_annotations)
+
         left_layout.addWidget(self.load_button)
         left_layout.addWidget(self.label_tree)
         left_layout.addWidget(self.add_label_button)
         left_layout.addWidget(self.toggle_button)
+        left_layout.addWidget(self.clear_button)
         left_layout.addWidget(self.export_button_label)
         left_layout.addWidget(self.export_button_anno)
 
@@ -91,6 +95,9 @@ class Annotator(QMainWindow):
                     for img_path in img_paths:
                         img_path = os.path.basename(img_path)
                         writer.writerow([img_path, label])
+
+    def clear_current_annotations(self):
+        self.image_view.clear_all_annotations()
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key_Left:
@@ -206,6 +213,10 @@ class GridView(QWidget):
             self.grid_layout.addWidget(view, i // 2, i % 2)
             self.image_views.append(view)
 
+    def clear_all_annotations(self):
+        for view in self.image_views:
+            view.clear_annotations()
+
 
 class ImageWithControls(QWidget):
     def __init__(self, image_path, label_list, parent_window, db):
@@ -250,8 +261,10 @@ class ImageWithControls(QWidget):
 
         self.image_view.get_current_anno_label = lambda: self.combo_anno.currentText()
 
-
         layout.addWidget(self.image_view)
+
+    def clear_annotations(self):
+        self.image_view.clear_all_annotations()
 
     def on_label_changed(self, new_label):
         # ラベル変更 → ファイル移動処理
@@ -328,9 +341,14 @@ class AnnotatableImageView(QGraphicsView):
             text_item.setBrush(QColor("blue"))
             self.scene.addItem(text_item)
 
-
-
             self.rect_items.append((rect_item, text_item))
+
+    def clear_all_annotations(self):
+        self.db.delete_all_annotations(self.image_path)
+        for rect_item, text_item in self.rect_items:
+            self.scene.removeItem(rect_item)
+            self.scene.removeItem(text_item)
+        self.rect_items.clear()
 
     def resizeEvent(self, event):
         if self.pixmap_item and self.image_path:
