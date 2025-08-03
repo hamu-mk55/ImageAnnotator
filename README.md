@@ -1,11 +1,12 @@
-# 概要
+# ImageAnnotator
+## overview
 ImageAnnotator
 
-# 環境
+## version 
 + python 3.10
 + PySide6 6.9.0
 + opencv-python 4.10
 
-# TODO
+## TODO
 + load annotation-file
 + 
