@@ -47,6 +47,7 @@ class Annotator(QMainWindow):
             ("Clear Annotations", self.clear_current_annotations),
             ("Export Labels", self.export_labels),
             ("Export Annotations", self.export_annotations),
+            ("Import Annotations", self.import_annotations),
         ]
 
         left_layout = QVBoxLayout()
@@ -179,6 +180,12 @@ class Annotator(QMainWindow):
         path, _ = QFileDialog.getSaveFileName(self, "Save CSV", "", "CSV files (*.csv)")
         if path:
             self.db.export_to_csv(path)
+
+    def import_annotations(self):
+        path, _ = QFileDialog.getOpenFileName(self, "Import CSV", "", "CSV files (*.csv)")
+        if path:
+            self.db.import_from_csv(path)
+            print(f"Imported annotations from: {path}")
 
     def export_labels(self):
         path, _ = QFileDialog.getSaveFileName(self, "Save CSV", "", "CSV files (*.csv)")
