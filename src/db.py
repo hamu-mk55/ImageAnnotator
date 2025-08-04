@@ -25,8 +25,11 @@ class AnnotationDB:
         )''')
         self.conn.commit()
 
-    def save_annotation(self, img_path, rect, rect_label):
-        label, filename = self._get_label_and_filename(img_path)
+    def save_annotation(self, img_path, rect, rect_label, label=None):
+        _label, filename = self._get_label_and_filename(img_path)
+
+        if label is None:
+            label = _label
 
         self.conn.execute(
             "INSERT INTO annotations (filename, x, y, width, height, rect_label, img_label) VALUES (?, ?, ?, ?, ?, ?,?)",
@@ -74,6 +77,24 @@ class AnnotationDB:
                 filename, x, y, width, height, rect_label, img_label = row
 
                 writer.writerow([filename, img_label, x, y, width, height, rect_label])
+
+    def import_from_csv(self, path: str):
+
+        with open(path, newline='', encoding='utf-8') as csvfile:
+            reader = csv.DictReader(csvfile)
+            for row in reader:
+                try:
+                    filename = row['filename']
+                    x = float(row['x'])
+                    y = float(row['y'])
+                    width = float(row['width'])
+                    height = float(row['height'])
+                    rect_label = row['rect_label']
+                    rect = QRectF(x, y, width, height)
+                    label = row['img_label']
+                    self.save_annotation(filename, rect, rect_label, label)
+                except Exception as e:
+                    print(f"[ERROR] Skipping row: {row} → {e}")
 
     def _get_label_and_filename(self, img_path):
         filename = os.path.basename(img_path)
