@@ -293,6 +293,14 @@ class AnnotatableImageView(QGraphicsView):
         self.orig_width = 1
         self.orig_height = 1
 
+        # zoom
+        self.view_scale = 1.0
+        self.zoom_scale = 3.0
+
+        self.setTransformationAnchor(QGraphicsView.AnchorUnderMouse)
+        self.setResizeAnchor(QGraphicsView.AnchorUnderMouse)
+        self.setDragMode(QGraphicsView.ScrollHandDrag)
+
     def set_image(self, path):
         self.scene.clear()
         self.rect_items.clear()
@@ -321,6 +329,8 @@ class AnnotatableImageView(QGraphicsView):
         self.scene.addItem(self.pixmap_item)
         self.setSceneRect(self.scene.itemsBoundingRect())
 
+        self.reset_zoom()
+
         self.load_annotations()
 
     def load_annotations(self):
@@ -348,37 +358,57 @@ class AnnotatableImageView(QGraphicsView):
             self.scene.removeItem(text_item)
         self.rect_items.clear()
 
+
     def resizeEvent(self, event):
+        # 画像を再スケールし直し、ビュー倍率は維持
         if self.pixmap_item and self.image_path:
+            # 現在のビュー倍率を保存
+            current_view_scale = self.view_scale
             self.set_image(self.image_path)
+
+            self.view_scale = current_view_scale
+            self.apply_view_scale()
         super().resizeEvent(event)
 
+
     def mousePressEvent(self, event):
-        # 左クリック：アノテーション追加開始
+        scene_pos = self.mapToScene(event.position().toPoint())
+
+        # 左クリック：アノテーション追加開始（従来通り）
         if event.button() == Qt.LeftButton:
-            self.start_point = self.mapToScene(event.position().toPoint())
+            self.start_point = scene_pos
 
-        # 右クリック：アノテーション削除
+        # 右クリック：
+        #   - 矩形上なら削除（従来通り）
+        #   - それ以外の場所ならズーム操作
         elif event.button() == Qt.RightButton:
-            pos = self.mapToScene(event.position().toPoint())
+            hit_rect = None
             for rect_item, text_item in self.rect_items:
-                if rect_item.rect().contains(pos):
-                    gui_rect = rect_item.rect()
-                    unscaled_rect = QRectF(
-                        gui_rect.x() / self.scale_ratio,
-                        gui_rect.y() / self.scale_ratio,
-                        gui_rect.width() / self.scale_ratio,
-                        gui_rect.height() / self.scale_ratio
-                    )
-
-                    rect_label = text_item.text()
-
-                    self.db.delete_annotation(self.image_path, unscaled_rect)
-                    self.scene.removeItem(rect_item)
-                    self.scene.removeItem(text_item)
-                    self.rect_items.remove((rect_item, text_item))
-
+                if rect_item.rect().contains(scene_pos):
+                    hit_rect = (rect_item, text_item)
                     break
+
+            if hit_rect:
+                # 既存：右クリックで削除
+                rect_item, text_item = hit_rect
+                gui_rect = rect_item.rect()
+                unscaled_rect = QRectF(
+                    gui_rect.x() / self.scale_ratio,
+                    gui_rect.y() / self.scale_ratio,
+                    gui_rect.width() / self.scale_ratio,
+                    gui_rect.height() / self.scale_ratio
+                )
+                rect_label = text_item.text()
+                self.db.delete_annotation(self.image_path, unscaled_rect)
+                self.scene.removeItem(rect_item)
+                self.scene.removeItem(text_item)
+                self.rect_items.remove((rect_item, text_item))
+            else:
+                # 右クリックでズームイン/アウト
+                if self.view_scale < self.zoom_scale:
+                    self.zoom_in()
+                else:
+                    self.reset_zoom()
 
         self.parent_window.image_view.setFocus()
 
@@ -415,6 +445,19 @@ class AnnotatableImageView(QGraphicsView):
             self.temp_rect = None
             self.start_point = None
             self.parent_window.image_view.setFocus()
+
+    # ズーム操作（ビュー変換のみを変更し、アノテーション座標はそのまま）
+    def apply_view_scale(self):
+        self.resetTransform()
+        self.scale(self.view_scale, self.view_scale)
+
+    def zoom_in(self):
+        self.view_scale = self.zoom_scale
+        self.apply_view_scale()
+
+    def reset_zoom(self):
+        self.view_scale = 1.0
+        self.apply_view_scale()
 
     def _get_rect_item(self, rect):
         rect_item = QGraphicsRectItem(rect)
