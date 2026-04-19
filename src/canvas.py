@@ -1,12 +1,11 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
-import csv
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 import tkinter as tk
-from tkinter import ttk, filedialog, messagebox, simpledialog
+from tkinter import ttk
 
 from PIL import Image, ImageTk
 
@@ -14,9 +13,10 @@ from .db import AnnotationDB
 
 
 class ImageWithControls(ttk.Frame):
-    """Header (filename, label selectors) + image view."""
+    """Composite widget containing image controls and the annotation canvas."""
 
     def __init__(self, master, parent_window, db: AnnotationDB) -> None:
+        """Create filename display, label selectors, and the image canvas."""
         super().__init__(master)
 
         self.parent_window = parent_window
@@ -48,6 +48,7 @@ class ImageWithControls(ttk.Frame):
         self.view.get_current_anno_label = lambda: self.combo_anno.get()
 
     def set_image_path(self, image_path: Path, label_list: List[str]) -> None:
+        """Set the active image and refresh label selectors for it."""
         self.image_path = image_path
         self.label_list = label_list
 
@@ -63,9 +64,11 @@ class ImageWithControls(ttk.Frame):
         self.view.set_image(image_path)
 
     def clear_annotations(self) -> None:
+        """Clear all annotations for the currently displayed image."""
         self.view.clear_all_annotations()
 
     def _on_label_changed(self, event=None) -> None:
+        """Move the current image when the image label selector changes."""
         if not self.image_path:
             return
 
@@ -80,6 +83,7 @@ class AnnotatableCanvas(tk.Frame):
     """Canvas-based image viewer with rectangle annotations."""
 
     def __init__(self, master, parent_window, db: AnnotationDB) -> None:
+        """Initialize canvas state and bind mouse and resize events."""
         super().__init__(master)
 
         self.parent_window = parent_window
@@ -116,6 +120,7 @@ class AnnotatableCanvas(tk.Frame):
     # Image
     # ------------------------------------------------------------------
     def set_image(self, path: Path) -> None:
+        """Load an image, fit it to the canvas, and draw saved annotations."""
         self.image_path = path
         self.canvas.delete("all")
         self.rect_items.clear()
@@ -133,6 +138,7 @@ class AnnotatableCanvas(tk.Frame):
         self._load_annotations()
 
     def _draw_image_fit(self) -> None:
+        """Draw the current image scaled to fit within the canvas."""
         if self.pil_image is None:
             return
 
@@ -157,6 +163,7 @@ class AnnotatableCanvas(tk.Frame):
         self.canvas_image_id = self.canvas.create_image(offset_x, offset_y, anchor="nw", image=self.tk_image)
 
     def _redraw_all(self) -> None:
+        """Redraw the image and all visible rectangles after a canvas change."""
         if self.image_path is None:
             return
 
@@ -172,6 +179,7 @@ class AnnotatableCanvas(tk.Frame):
             self._draw_saved_rect(rect, label)
 
     def _on_resize(self, event=None) -> None:
+        """Redraw the image and annotations when the canvas is resized."""
         if self.pil_image is not None:
             self._redraw_all()
 
@@ -179,6 +187,7 @@ class AnnotatableCanvas(tk.Frame):
     # Annotation load / clear
     # ------------------------------------------------------------------
     def _load_annotations(self) -> None:
+        """Load saved annotations for the current image and draw them."""
         if not self.image_path:
             return
 
@@ -188,6 +197,7 @@ class AnnotatableCanvas(tk.Frame):
             self._draw_saved_rect(unscaled, label)
 
     def clear_all_annotations(self) -> None:
+        """Delete all saved and visible annotations for the current image."""
         if not self.image_path:
             return
 
@@ -202,6 +212,7 @@ class AnnotatableCanvas(tk.Frame):
     # Drawing helpers
     # ------------------------------------------------------------------
     def _image_offset(self) -> Tuple[float, float]:
+        """Return the top-left canvas offset of the fitted image."""
         canvas_w = max(self.canvas.winfo_width(), 1)
         canvas_h = max(self.canvas.winfo_height(), 1)
         draw_w = self.orig_width * self.scale_ratio
@@ -211,18 +222,21 @@ class AnnotatableCanvas(tk.Frame):
         return offset_x, offset_y
 
     def _canvas_to_image(self, x: float, y: float) -> Tuple[float, float]:
+        """Convert canvas coordinates to original image coordinates."""
         ox, oy = self._image_offset()
         ix = (x - ox) / self.scale_ratio
         iy = (y - oy) / self.scale_ratio
         return ix, iy
 
     def _image_to_canvas(self, x: float, y: float) -> Tuple[float, float]:
+        """Convert original image coordinates to canvas coordinates."""
         ox, oy = self._image_offset()
         cx = ox + x * self.scale_ratio
         cy = oy + y * self.scale_ratio
         return cx, cy
 
     def _draw_saved_rect(self, unscaled_rect: Tuple[float, float, float, float], label: str) -> None:
+        """Draw a saved rectangle and label using original image coordinates."""
         x1, y1 = self._image_to_canvas(unscaled_rect[0], unscaled_rect[1])
         x2, y2 = self._image_to_canvas(unscaled_rect[2], unscaled_rect[3])
 
@@ -234,6 +248,7 @@ class AnnotatableCanvas(tk.Frame):
     # Mouse events
     # ------------------------------------------------------------------
     def _on_left_down(self, event) -> None:
+        """Start drawing a temporary rectangle at the mouse position."""
         self.temp_start = (event.x, event.y)
         self.temp_rect_id = self.canvas.create_rectangle(
             event.x, event.y, event.x, event.y,
@@ -241,6 +256,7 @@ class AnnotatableCanvas(tk.Frame):
         )
 
     def _on_left_drag(self, event) -> None:
+        """Resize the temporary rectangle while the mouse is dragged."""
         if self.temp_rect_id is None or self.temp_start is None:
             return
 
@@ -248,6 +264,7 @@ class AnnotatableCanvas(tk.Frame):
         self.canvas.coords(self.temp_rect_id, x0, y0, event.x, event.y)
 
     def _on_left_up(self, event) -> None:
+        """Finalize a drawn rectangle, save it, and attach its label."""
         if self.temp_rect_id is None or self.temp_start is None or not self.image_path:
             return
 
@@ -286,12 +303,14 @@ class AnnotatableCanvas(tk.Frame):
         self.temp_start = None
 
     def _on_right_click(self, event) -> None:
+        """Delete the rectangle under the mouse cursor, if any."""
         hit = self._hit_test(event.x, event.y)
         if hit is not None:
             self._delete_rect(hit)
             return
 
     def _hit_test(self, x: float, y: float) -> Optional[int]:
+        """Return the index of the rectangle containing a canvas point."""
         for i, (rect_id, text_id, _, _) in enumerate(self.rect_items):
             coords = self.canvas.coords(rect_id)
             if len(coords) == 4:
@@ -301,6 +320,7 @@ class AnnotatableCanvas(tk.Frame):
         return None
 
     def _delete_rect(self, index: int) -> None:
+        """Delete one rectangle annotation by index from the database and canvas."""
         if not self.image_path:
             return
 
@@ -315,4 +335,3 @@ class AnnotatableCanvas(tk.Frame):
         self.canvas.delete(rect_id)
         self.canvas.delete(text_id)
         del self.rect_items[index]
-
