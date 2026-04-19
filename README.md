@@ -1,37 +1,44 @@
 # Image Annotator
-- Tkinter ベースのシンプルな画像ラベリング・バウンディングボックスアノテーションツール  
-- フォルダ配下の画像をラベル別に管理し、画像単位のラベル変更と矩形アノテーションの付与を実施  
-- アノテーション情報は SQLite に保存。CSV での入出力にも対応  
+
+- A simple Tkinter-based image labeling and bounding box annotation tool
+- Manages images under folders by label, and supports both image-level label changes and rectangle annotations
+- Annotation data is stored in SQLite and can also be imported/exported as CSV
+
 ---
 
-## 主な機能
-- ラベルごとの画像フォルダを読み込み
-- 左ペインの Treeview でラベル・画像を選択
-- 画像ごとのラベル変更
-- 矩形アノテーションの追加
-- 右クリックによる矩形アノテーション削除
-- 画像ごとのアノテーション全削除
-- 画像ラベル一覧の CSV 出力
-- アノテーションの CSV 出力 / 取込
+## Main Features
 
-## 画面構成
-### 左ペイン
-- **Set image folder**: 画像フォルダ選択
-- **Add Label**: ラベル用フォルダを追加
-- **Clear Annotations**: 現在画像の矩形アノテーションを全削除
-- **Export Labels**: 画像ラベル一覧を CSV 出力
-- **Export Annotations**: アノテーションを CSV 出力
-- **Import Annotations**: アノテーション CSV を取込
-- **Treeview**: ラベルと画像の一覧表示
+- Load image folders organized by label
+- Select labels and images from the Treeview in the left pane
+- Change the label of each image
+- Add rectangle annotations
+- Delete rectangle annotations by right-clicking
+- Clear all annotations for the current image
+- Export image labels to CSV
+- Export / import annotations as CSV
 
-### 右ペイン
-- ファイル名表示
-- 画像ラベル変更用コンボボックス
-- アノテーションラベル選択用コンボボックス
-- 画像表示キャンバス
+## Screen Layout
 
-## 想定するフォルダ構成
-ルートフォルダ配下に、ラベル名ごとのサブフォルダを作成して画像を格納します。
+### Left Pane
+
+- **Set image folder**: Select the image folder
+- **Add Label**: Add a new label folder
+- **Clear Annotations**: Delete all rectangle annotations for the current image
+- **Export Labels**: Export the list of image labels to CSV
+- **Export Annotations**: Export annotations to CSV
+- **Import Annotations**: Import annotation CSV
+- **Treeview**: Display a list of labels and images
+
+### Right Pane
+
+- File name display
+- Combo box for changing the image label
+- Combo box for selecting the annotation label
+- Image display canvas
+
+## Expected Folder Structure
+
+Create subfolders for each label under the root folder and store images in them.
 
 ```text
 images_root/
@@ -48,26 +55,33 @@ images_root/
    └─ ...
 ```
 
-各サブフォルダ名が画像ラベルとして扱われます。
+Each subfolder name is treated as an image label.
+
 ---
 
-## 対応画像形式
-現在の対応拡張子は以下です。
+## Supported Image Formats
+
+The currently supported file extensions are:
+
 - `.png`
 - `.jpg`
 - `.jpeg`
 - `.bmp`
 
 ---
-## セットアップ
-### 必要環境
-- Python 3.10 以上推奨
+
+## Setup
+
+### Requirements
+
+- Python 3.10 or later recommended
 - Tkinter
 - Pillow
 - SQLite3
 
-## 実行方法
-プロジェクト構成の例:
+## How to Run
+
+Example project structure:
 
 ```text
 project/
@@ -77,7 +91,7 @@ project/
    └─ db.py
 ```
 
-実行:
+Run:
 
 ```bash
 python main.py
@@ -85,60 +99,74 @@ python main.py
 
 ---
 
-## 使い方
+## Usage
 
-### 1. 画像フォルダを選択
-- 左ペインの **Set image folder** から、ラベル別サブフォルダを含むルートフォルダを選択  
-- 選択後、ラベルごとの画像一覧が Treeview に表示
+### 1. Select the Image Folder
 
-### 2. 画像を選択
-- Treeview から画像を選択すると、右ペインに画像が表示
-- ラベルノードを選んだ場合は、そのラベル内の先頭画像が表示
+- Use **Set image folder** in the left pane to select the root folder that contains label subfolders
+- After selection, the image list for each label is displayed in the Treeview
 
-### 3. 画像ラベルを変更
-- 右上のコンボボックスからラベルを変更すると、画像ファイル自体が該当ラベルのフォルダへ移動  
-- 移動後は**元ラベル側の次画像**を表示し、Treeview もその画像へ追従
+### 2. Select an Image
 
-### 4. 矩形アノテーションを追加
-- 画像上で左ドラッグすると矩形を作成
-- 矩形ラベルは `Annotation Label` コンボボックスの選択値が使われ、未選択時は画像ラベルが適用
+- When you select an image from the Treeview, it is displayed in the right pane
+- If a label node is selected, the first image in that label is displayed
 
-### 5. 矩形アノテーションを削除
-- 既存矩形の内側で右クリックすると、その矩形を削除
+### 3. Change the Image Label
 
-### 6. 画像移動
-- `←`: 前の画像
-- `→`: 次の画像
+- When you change the label from the combo box in the upper right, the image file itself is moved to the corresponding label folder
+- After moving, the **next image in the original label** is displayed, and the Treeview selection also follows that image
 
----
-## データ保存仕様
-アノテーションは SQLite の `annotations` テーブルに保存されます。
+### 4. Add a Rectangle Annotation
 
-### テーブル構造
-- `filename`: 画像ファイル名
-- `x`, `y`, `width`, `height`: 矩形座標
-- `rect_label`: 矩形ラベル
-- `img_label`: 画像ラベル
+- Drag the mouse on the image with the left button to create a rectangle
+- The rectangle label uses the selected value in the `Annotation Label` combo box; if nothing is selected, the image label is used
 
-### DB ファイル
-- 起動時に `annotations.db` を使用します。  
-- 存在しない場合は自動作成されます。 fileciteturn1file0L29-L31
+### 5. Delete a Rectangle Annotation
+
+- Right-click inside an existing rectangle to delete that rectangle
+
+### 6. Move Between Images
+
+- `←`: Previous image
+- `→`: Next image
 
 ---
 
-## CSV 入出力
+## Data Storage Specification
+
+Annotations are stored in the SQLite `annotations` table.
+
+### Table Structure
+
+- `filename`: Image file name
+- `x`, `y`, `width`, `height`: Rectangle coordinates
+- `rect_label`: Rectangle label
+- `img_label`: Image label
+
+### Database File
+
+- `annotations.db` is used at startup
+- If it does not exist, it is created automatically
+
+---
+
+## CSV Import / Export
+
 ### Export Labels
-画像ファイル名とラベルの一覧を CSV 出力
 
-出力列:
+Exports a CSV list of image file names and labels
+
+Output columns:
+
 - `file_path`
 - `label`
 
-
 ### Export Annotations
-アノテーション情報を CSV 出力
 
-出力列:
+Exports annotation data to CSV
+
+Output columns:
+
 - `filename`
 - `img_label`
 - `x`
@@ -148,23 +176,24 @@ python main.py
 - `rect_label`
 
 ### Import Annotations
-アノテーション CSV を取り込み、DB に追加
-取込時は `filename` と座標・ラベルを使って保存
+
+Imports annotation CSV data and adds it to the database
+
+During import, data is saved using `filename`, coordinates, and labels
 
 ---
 
-## 現在の設計上の前提
-### ファイル名は一意である前提
-現在の実装では、画像識別に主に `filename` を使用  
-そのため、**全画像でファイル名が重複しない**前提で使う想定
+## Current Design Assumptions
+
+### File Names Are Assumed to Be Unique
+
+In the current implementation, image identification mainly uses `filename`.
+
+Therefore, it is assumed that **file names are unique across all images**.
 
 ## TODO
-- 既存矩形の移動 / リサイズ / ラベル変更
+
+- Move / resize / relabel existing rectangles
 - Undo / Redo
-- ズーム / パン
-- サムネイル一覧
-
----
-
-
-
+- Zoom / Pan
+- Thumbnail list
