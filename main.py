@@ -107,7 +107,7 @@ class Annotator(tk.Tk):
                 label = child.name
                 paths = sorted(
                     [p for p in child.iterdir() if p.is_file() and is_image(p)],
-                    key=lambda p: p.name.lower()
+                    key=lambda p: p.name.lower(),
                 )
                 self.image_dict[label] = paths
 
@@ -150,7 +150,7 @@ class Annotator(tk.Tk):
         restore_selection_id = None
 
         for label in sorted(self.image_dict.keys(), key=str.lower):
-            should_open = (label in open_labels)
+            should_open = label in open_labels
 
             # 優先選択先がこのラベル配下なら開く
             if selected_value:
@@ -160,11 +160,7 @@ class Annotator(tk.Tk):
                     should_open = True
 
             parent_id = self.label_tree.insert(
-                "",
-                "end",
-                text=label,
-                values=("label", label),
-                open=should_open
+                "", "end", text=label, values=("label", label), open=should_open
             )
 
             if selected_value == ("label", label):
@@ -175,7 +171,7 @@ class Annotator(tk.Tk):
                     parent_id,
                     "end",
                     text=img_path.name,
-                    values=("image", label, img_path.name)
+                    values=("image", label, img_path.name),
                 )
 
                 if selected_value == ("image", label, img_path.name):
@@ -277,7 +273,7 @@ class Annotator(tk.Tk):
         if new_path.exists():
             messagebox.showwarning(
                 "File already exists",
-                f"Cannot move this image because the destination already exists:\n{new_path}"
+                f"Cannot move this image because the destination already exists:\n{new_path}",
             )
             return image_path
 
@@ -344,7 +340,7 @@ class Annotator(tk.Tk):
         path = filedialog.asksaveasfilename(
             title="Save CSV",
             defaultextension=".csv",
-            filetypes=[("CSV files", "*.csv")]
+            filetypes=[("CSV files", "*.csv")],
         )
         if path:
             self.db.export_to_csv(path)
@@ -352,8 +348,7 @@ class Annotator(tk.Tk):
     def _import_annotations_csv(self) -> None:
         """Prompt for a CSV file and import rectangle annotations into the database."""
         path = filedialog.askopenfilename(
-            title="Import CSV",
-            filetypes=[("CSV files", "*.csv")]
+            title="Import CSV", filetypes=[("CSV files", "*.csv")]
         )
         if path:
             self.db.import_from_csv(path)
@@ -364,7 +359,7 @@ class Annotator(tk.Tk):
         path = filedialog.asksaveasfilename(
             title="Save CSV",
             defaultextension=".csv",
-            filetypes=[("CSV files", "*.csv")]
+            filetypes=[("CSV files", "*.csv")],
         )
         if not path:
             return
@@ -380,8 +375,6 @@ class Annotator(tk.Tk):
     def _clear_current_annotations(self) -> None:
         """Clear all rectangle annotations for the currently displayed image."""
         self.image_with_controls.clear_annotations()
-
-
 
 
 if __name__ == "__main__":
