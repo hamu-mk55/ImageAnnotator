@@ -58,15 +58,13 @@ images_root/
 - `.jpeg`
 - `.bmp`
 
-`IMAGE_EXTS` で判定しています。 fileciteturn1file0L14-L17
-
 ---
 ## セットアップ
 ### 必要環境
 - Python 3.10 以上推奨
 - Tkinter
 - Pillow
-- SQLite3（Python 標準ライブラリ）
+- SQLite3
 
 ## 実行方法
 プロジェクト構成の例:
@@ -90,78 +88,57 @@ python main.py
 ## 使い方
 
 ### 1. 画像フォルダを選択
-
-左ペインの **Set image folder** から、ラベル別サブフォルダを含むルートフォルダを選択します。  
-選択後、ラベルごとの画像一覧が Treeview に表示されます。 fileciteturn1file0L70-L79
+- 左ペインの **Set image folder** から、ラベル別サブフォルダを含むルートフォルダを選択  
+- 選択後、ラベルごとの画像一覧が Treeview に表示
 
 ### 2. 画像を選択
-
-Treeview から画像を選択すると、右ペインに画像が表示されます。  
-ラベルノードを選んだ場合は、そのラベル内の先頭画像が表示されます。 fileciteturn1file0L223-L246
+- Treeview から画像を選択すると、右ペインに画像が表示
+- ラベルノードを選んだ場合は、そのラベル内の先頭画像が表示
 
 ### 3. 画像ラベルを変更
-
-右上のコンボボックスからラベルを変更すると、画像ファイル自体が該当ラベルのフォルダへ移動します。  
-現在の実装では、移動後は**元ラベル側の次画像**を表示し、Treeview もその画像へ追従します。  
-また、Treeview の展開状態は保持されます。 fileciteturn1file1L56-L64 fileciteturn1file0L154-L218 fileciteturn1file0L276-L330
+- 右上のコンボボックスからラベルを変更すると、画像ファイル自体が該当ラベルのフォルダへ移動  
+- 移動後は**元ラベル側の次画像**を表示し、Treeview もその画像へ追従
 
 ### 4. 矩形アノテーションを追加
-
-画像上で左ドラッグすると矩形を作成できます。  
-矩形ラベルは `Annotation Label` コンボボックスの選択値が使われ、未選択時は画像ラベルが使われます。 fileciteturn1file1L84-L95 fileciteturn1file1L222-L257
+- 画像上で左ドラッグすると矩形を作成
+- 矩形ラベルは `Annotation Label` コンボボックスの選択値が使われ、未選択時は画像ラベルが適用
 
 ### 5. 矩形アノテーションを削除
-
-既存矩形の内側で右クリックすると、その矩形を削除します。 fileciteturn1file1L259-L281
+- 既存矩形の内側で右クリックすると、その矩形を削除
 
 ### 6. 画像移動
-
 - `←`: 前の画像
 - `→`: 次の画像
 
-同一ラベル内の画像リストに対して移動します。 fileciteturn1file0L31-L32 fileciteturn1file0L248-L255
-
 ---
-
 ## データ保存仕様
-
 アノテーションは SQLite の `annotations` テーブルに保存されます。
 
 ### テーブル構造
-
 - `filename`: 画像ファイル名
 - `x`, `y`, `width`, `height`: 矩形座標
 - `rect_label`: 矩形ラベル
 - `img_label`: 画像ラベル
 
-テーブル作成処理は `AnnotationDB.create_table()` で行っています。 fileciteturn1file2L13-L24
-
 ### DB ファイル
-
-起動時に `annotations.db` を使用します。  
-存在しない場合は自動作成されます。 fileciteturn1file0L29-L31
+- 起動時に `annotations.db` を使用します。  
+- 存在しない場合は自動作成されます。 fileciteturn1file0L29-L31
 
 ---
 
 ## CSV 入出力
-
 ### Export Labels
-
-画像ファイル名とラベルの一覧を CSV 出力します。
+画像ファイル名とラベルの一覧を CSV 出力
 
 出力列:
-
 - `file_path`
 - `label`
 
-現状は `file_path` 列にフルパスではなくファイル名を書き出しています。 fileciteturn1file0L346-L359
 
 ### Export Annotations
-
-アノテーション情報を CSV 出力します。
+アノテーション情報を CSV 出力
 
 出力列:
-
 - `filename`
 - `img_label`
 - `x`
@@ -170,19 +147,16 @@ Treeview から画像を選択すると、右ペインに画像が表示され�
 - `height`
 - `rect_label`
 
-`AnnotationDB.export_to_csv()` で出力しています。 fileciteturn1file2L74-L89
-
 ### Import Annotations
-アノテーション CSV を取り込み、DB に追加します。  
-取込時は `filename` と座標・ラベルを使って保存します。 fileciteturn1file2L90-L107
+アノテーション CSV を取り込み、DB に追加
+取込時は `filename` と座標・ラベルを使って保存
 
 ---
 
 ## 現在の設計上の前提
 ### ファイル名は一意である前提
-現在の実装では、画像識別に主に `filename` を使っています。  
-そのため、**全画像でファイル名が重複しない**前提で使う想定です。  
-アノテーションの保存・検索・削除・画像ラベル更新も、この前提に強く依存しています。 fileciteturn1file2L27-L41 fileciteturn1file2L43-L63
+現在の実装では、画像識別に主に `filename` を使用  
+そのため、**全画像でファイル名が重複しない**前提で使う想定
 
 ## TODO
 - 既存矩形の移動 / リサイズ / ラベル変更
