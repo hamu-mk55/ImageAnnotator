@@ -3,12 +3,10 @@ from __future__ import annotations
 
 import csv
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox, simpledialog
-
-from PIL import Image, ImageTk
 
 from src.canvas import ImageWithControls
 from src.db import AnnotationDB
@@ -18,13 +16,15 @@ IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".bmp"}
 
 
 def is_image(path: Path) -> bool:
+    """Return True if the path has a supported image file extension."""
     return path.suffix.lower() in IMAGE_EXTS
 
 
 class Annotator(tk.Tk):
-    """Top-level window coordinating folder/labels and the image view."""
+    """Main application window coordinating folders, labels, and the image view."""
 
     def __init__(self) -> None:
+        """Initialize application state, database access, UI, and key bindings."""
         super().__init__()
 
         self.title("ImageAnnotator")
@@ -44,6 +44,7 @@ class Annotator(tk.Tk):
         self.bind("<Right>", lambda e: self._show_next_image())
 
     def _init_ui(self) -> None:
+        """Create the folder controls, label tree, and image display area."""
         main_pane = ttk.Panedwindow(self, orient=tk.HORIZONTAL)
         main_pane.pack(fill=tk.BOTH, expand=True)
 
@@ -81,6 +82,7 @@ class Annotator(tk.Tk):
     # Folder / Labels
     # ------------------------------------------------------------------
     def _choose_image_folder(self) -> None:
+        """Select the image root folder, scan labels/images, and refresh the tree."""
         folder = filedialog.askdirectory(title="Select image folder")
         if not folder:
             return
@@ -92,9 +94,10 @@ class Annotator(tk.Tk):
 
         self.root_folder = root
         self._scan_labels_and_images()
-        self._populate_label_tree()
+        self._remake_label_tree()
 
     def _scan_labels_and_images(self) -> None:
+        """Build the label-to-image-path mapping from subfolders under the root folder."""
         self.image_dict.clear()
         if not self.root_folder:
             return
@@ -108,81 +111,15 @@ class Annotator(tk.Tk):
                 )
                 self.image_dict[label] = paths
 
-    # def _populate_label_tree(self) -> None:
-    #     self.label_tree.delete(*self.label_tree.get_children())
-    #
-    #     for label in sorted(self.image_dict.keys(), key=str.lower):
-    #         parent_id = self.label_tree.insert("", "end", text=label, values=("label", label))
-    #         for img_path in self.image_dict[label]:
-    #             self.label_tree.insert(parent_id, "end", text=img_path.name, values=("image", label, img_path.name))
-
-    # def _populate_label_tree(self) -> None:
-    #     # 現在開いているラベルを保存
-    #     open_labels = set()
-    #     selected_value = None
-    #
-    #     for item_id in self.label_tree.get_children():
-    #         label = self.label_tree.item(item_id, "text")
-    #         if self.label_tree.item(item_id, "open"):
-    #             open_labels.add(label)
-    #
-    #     # 現在選択中の項目を保存
-    #     selected = self.label_tree.selection()
-    #     if selected:
-    #         item_id = selected[0]
-    #         parent_id = self.label_tree.parent(item_id)
-    #         if parent_id:
-    #             # 画像ノード
-    #             label = self.label_tree.item(parent_id, "text")
-    #             image_name = self.label_tree.item(item_id, "text")
-    #             selected_value = ("image", label, image_name)
-    #         else:
-    #             # ラベルノード
-    #             label = self.label_tree.item(item_id, "text")
-    #             selected_value = ("label", label)
-    #
-    #     # 全削除して再構築
-    #     self.label_tree.delete(*self.label_tree.get_children())
-    #
-    #     restore_selection_id = None
-    #
-    #     for label in sorted(self.image_dict.keys(), key=str.lower):
-    #         parent_id = self.label_tree.insert(
-    #             "", "end",
-    #             text=label,
-    #             values=("label", label),
-    #             open=(label in open_labels)
-    #         )
-    #
-    #         if selected_value == ("label", label):
-    #             restore_selection_id = parent_id
-    #
-    #         for img_path in self.image_dict[label]:
-    #             child_id = self.label_tree.insert(
-    #                 parent_id, "end",
-    #                 text=img_path.name,
-    #                 values=("image", label, img_path.name)
-    #             )
-    #
-    #             if selected_value == ("image", label, img_path.name):
-    #                 restore_selection_id = child_id
-    #
-    #     if restore_selection_id:
-    #         self.label_tree.selection_set(restore_selection_id)
-    #         self.label_tree.focus(restore_selection_id)
-    #         self.label_tree.see(restore_selection_id)
-
-    def _populate_label_tree(self, preferred_selection=None) -> None:
+    def _remake_label_tree(self, preferred_selection=None) -> None:
         """
-        preferred_selection:
-            None
-            ("label", label)
-            ("image", label, image_name)
+        Rebuild the label tree while preserving expanded labels and selection.
 
-        preferred_selection があればそれを優先。
-        なければ現在の選択をできるだけ復元する。
+        Args:
+            preferred_selection: Optional item to select after rebuilding.
+                Use ("label", label) for a label node or
+                ("image", label, image_name) for an image node.
         """
-
         # 現在開いているラベルを保存
         open_labels = set()
         for item_id in self.label_tree.get_children():
@@ -250,6 +187,7 @@ class Annotator(tk.Tk):
             self.label_tree.see(restore_selection_id)
 
     def _add_label(self) -> None:
+        """Prompt for a new label, create its folder, and refresh the label tree."""
         if not self.root_folder:
             messagebox.showinfo("Tip", "Please set the image folder first.")
             return
@@ -259,12 +197,13 @@ class Annotator(tk.Tk):
             new_dir = self.root_folder / text
             new_dir.mkdir(parents=True, exist_ok=True)
             self.image_dict.setdefault(text, [])
-            self._populate_label_tree()
+            self._remake_label_tree()
 
     # ------------------------------------------------------------------
     # Navigation
     # ------------------------------------------------------------------
     def _on_label_item_clicked(self, event=None) -> None:
+        """Handle tree selection changes and display the selected image."""
         selected = self.label_tree.selection()
         if not selected:
             return
@@ -292,16 +231,19 @@ class Annotator(tk.Tk):
         self._update_image_display()
 
     def _show_next_image(self) -> None:
+        """Advance to the next image in the current label, if available."""
         if self.current_index + 1 < len(self.current_images):
             self.current_index += 1
             self._update_image_display()
 
     def _show_prev_image(self) -> None:
+        """Move to the previous image in the current label, if available."""
         if self.current_index - 1 >= 0:
             self.current_index -= 1
             self._update_image_display()
 
     def _update_image_display(self) -> None:
+        """Display the current image and refresh the available label choices."""
         if not self.current_images:
             return
 
@@ -312,59 +254,17 @@ class Annotator(tk.Tk):
     # ------------------------------------------------------------------
     # File Move / Label Change
     # ------------------------------------------------------------------
-    # def move_image_to_label(self, image_path: Path, new_label: str) -> Path:
-    #     old_label = image_path.parent.name
-    #     if old_label == new_label:
-    #         return image_path
-    #
-    #     file_name = image_path.name
-    #     new_dir = self.root_folder / new_label
-    #     new_dir.mkdir(parents=True, exist_ok=True)
-    #     new_path = new_dir / file_name
-    #
-    #     # 旧ラベル内での元の位置を記録
-    #     old_list = self.image_dict.get(old_label, [])
-    #     try:
-    #         old_index = old_list.index(image_path)
-    #     except ValueError:
-    #         old_index = 0
-    #
-    #     # ファイル移動
-    #     image_path.replace(new_path)
-    #
-    #     # image_dict 更新
-    #     if image_path in old_list:
-    #         old_list.remove(image_path)
-    #
-    #     self.image_dict.setdefault(new_label, [])
-    #     self.image_dict[new_label].append(new_path)
-    #     self.image_dict[new_label].sort(key=lambda p: p.name.lower())
-    #
-    #     # DB側の画像ラベル更新
-    #     self.db.update_label(str(new_path))
-    #
-    #     # 左ツリー更新
-    #     self._populate_label_tree()
-    #
-    #     # 移動後は old_label 側の次画像を表示し続ける
-    #     self.current_label = old_label
-    #     self.current_images = self.image_dict.get(old_label, [])
-    #
-    #     if self.current_images:
-    #         self.current_index = min(old_index, len(self.current_images) - 1)
-    #         self._update_image_display()
-    #     else:
-    #         self.current_index = 0
-    #         self.image_with_controls.view.canvas.delete("all")
-    #         self.image_with_controls.view.rect_items.clear()
-    #         self.image_with_controls.image_path = None
-    #         self.image_with_controls.filename_label.config(text="")
-    #         self.image_with_controls.combo_label.set("")
-    #         self.image_with_controls.combo_anno.set("")
-    #
-    #     return new_path
-
     def move_image_to_label(self, image_path: Path, new_label: str) -> Path:
+        """
+        Move an image to another label folder and refresh related UI state.
+
+        Args:
+            image_path: Current path of the image to move.
+            new_label: Destination label folder name.
+
+        Returns:
+            The new image path after a successful move, or the original path if no move occurred.
+        """
         old_label = image_path.parent.name
         if old_label == new_label:
             return image_path
@@ -373,6 +273,13 @@ class Annotator(tk.Tk):
         new_dir = self.root_folder / new_label
         new_dir.mkdir(parents=True, exist_ok=True)
         new_path = new_dir / file_name
+
+        if new_path.exists():
+            messagebox.showwarning(
+                "File already exists",
+                f"Cannot move this image because the destination already exists:\n{new_path}"
+            )
+            return image_path
 
         # 旧ラベル内での元の位置を記録
         old_list = self.image_dict.get(old_label, [])
@@ -395,7 +302,6 @@ class Annotator(tk.Tk):
         # DB側の画像ラベル更新
         self.db.update_label(str(new_path))
 
-        # 案B:
         # 移動後は old_label 側の次画像を表示し続ける
         self.current_label = old_label
         self.current_images = self.image_dict.get(old_label, [])
@@ -408,14 +314,14 @@ class Annotator(tk.Tk):
             preferred_selection = ("image", old_label, next_image.name)
 
             # Treeview再構築 + 次画像ノードを選択
-            self._populate_label_tree(preferred_selection=preferred_selection)
+            self._remake_label_tree(preferred_selection=preferred_selection)
 
             # 画面表示も次画像へ
             self._update_image_display()
         else:
             # 旧ラベルが空になった場合は old_label ノードを選択
             preferred_selection = ("label", old_label)
-            self._populate_label_tree(preferred_selection=preferred_selection)
+            self._remake_label_tree(preferred_selection=preferred_selection)
 
             self.current_index = 0
             self.current_label = old_label
@@ -434,6 +340,7 @@ class Annotator(tk.Tk):
     # Import / Export
     # ------------------------------------------------------------------
     def _export_annotations_csv(self) -> None:
+        """Prompt for a CSV file path and export saved rectangle annotations."""
         path = filedialog.asksaveasfilename(
             title="Save CSV",
             defaultextension=".csv",
@@ -443,6 +350,7 @@ class Annotator(tk.Tk):
             self.db.export_to_csv(path)
 
     def _import_annotations_csv(self) -> None:
+        """Prompt for a CSV file and import rectangle annotations into the database."""
         path = filedialog.askopenfilename(
             title="Import CSV",
             filetypes=[("CSV files", "*.csv")]
@@ -452,6 +360,7 @@ class Annotator(tk.Tk):
             messagebox.showinfo("Import", f"Imported annotations from:\n{path}")
 
     def _export_labels_csv(self) -> None:
+        """Prompt for a CSV file path and export the current image-label mapping."""
         path = filedialog.asksaveasfilename(
             title="Save CSV",
             defaultextension=".csv",
@@ -469,6 +378,7 @@ class Annotator(tk.Tk):
 
     # ------------------------------------------------------------------
     def _clear_current_annotations(self) -> None:
+        """Clear all rectangle annotations for the currently displayed image."""
         self.image_with_controls.clear_annotations()
 
 
