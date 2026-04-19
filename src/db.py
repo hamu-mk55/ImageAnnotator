@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
-import os
+"""SQLite persistence helpers for image labels and rectangle annotations."""
+
 import csv
+import os
 import sqlite3
 from typing import Any, List, Tuple
-
 
 RectWH = Tuple[float, float, float, float]  # (x, y, width, height)
 
@@ -33,7 +34,9 @@ class AnnotationDB:
         )
         self.conn.commit()
 
-    def save_annotation(self, img_path: str, rect: Any, rect_label: str, label: str = None) -> None:
+    def save_annotation(
+        self, img_path: str, rect: Any, rect_label: str, label: str = None
+    ) -> None:
         """
         Save one rectangle annotation for an image.
 
@@ -55,7 +58,7 @@ class AnnotationDB:
             INSERT INTO annotations (filename, x, y, width, height, rect_label, img_label)
             VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
-            (filename, x, y, width, height, rect_label, label)
+            (filename, x, y, width, height, rect_label, label),
         )
         self.conn.commit()
 
@@ -69,9 +72,11 @@ class AnnotationDB:
             FROM annotations
             WHERE filename=?
             """,
-            (filename,)
+            (filename,),
         )
-        return [((x, y, w, h), rect_label) for x, y, w, h, rect_label in cursor.fetchall()]
+        return [
+            ((x, y, w, h), rect_label) for x, y, w, h, rect_label in cursor.fetchall()
+        ]
 
     def delete_annotation(self, img_path: str, rect: Any, tol: float = 1.0) -> None:
         """
@@ -94,7 +99,7 @@ class AnnotationDB:
               AND ABS(width - ?) < ?
               AND ABS(height - ?) < ?
             """,
-            (filename, x, tol, y, tol, width, tol, height, tol)
+            (filename, x, tol, y, tol, width, tol, height, tol),
         )
         self.conn.commit()
 
@@ -103,8 +108,7 @@ class AnnotationDB:
         label, filename = self._get_label_and_filename(img_path)
 
         self.conn.execute(
-            "UPDATE annotations SET img_label=? WHERE filename=?",
-            (label, filename)
+            "UPDATE annotations SET img_label=? WHERE filename=?", (label, filename)
         )
         self.conn.commit()
 
@@ -112,10 +116,7 @@ class AnnotationDB:
         """Delete all rectangle annotations saved for the given image."""
         _, filename = self._get_label_and_filename(img_path)
 
-        self.conn.execute(
-            "DELETE FROM annotations WHERE filename=?",
-            (filename,)
-        )
+        self.conn.execute("DELETE FROM annotations WHERE filename=?", (filename,))
         self.conn.commit()
 
     def export_to_csv(self, csv_path: str) -> None:
@@ -129,7 +130,9 @@ class AnnotationDB:
 
         with open(csv_path, "w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
-            writer.writerow(["filename", "img_label", "x", "y", "width", "height", "rect_label"])
+            writer.writerow(
+                ["filename", "img_label", "x", "y", "width", "height", "rect_label"]
+            )
 
             for row in cursor:
                 filename, x, y, width, height, rect_label, img_label = row
@@ -164,10 +167,7 @@ class AnnotationDB:
                     print(f"[ERROR] Skipping row: {row} -> {e}")
 
         for filename in filenames:
-            self.conn.execute(
-                "DELETE FROM annotations WHERE filename=?",
-                (filename,)
-            )
+            self.conn.execute("DELETE FROM annotations WHERE filename=?", (filename,))
         self.conn.commit()
 
         for filename, rect, rect_label, label in imported_rows:
@@ -177,7 +177,6 @@ class AnnotationDB:
         """Close the SQLite connection if it is open."""
         if self.conn:
             self.conn.close()
-
 
     def _get_label_and_filename(self, img_path: str) -> Tuple[str, str]:
         """Return the parent-folder label and basename for an image path."""

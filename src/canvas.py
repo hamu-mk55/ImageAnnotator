@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+"""Tkinter canvas widgets for displaying images and editing annotations."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -76,7 +78,9 @@ class ImageWithControls(ttk.Frame):
         old_label = self.image_path.parent.name
 
         if new_label and new_label != old_label and new_label in self.label_list:
-            self.image_path = self.parent_window.move_image_to_label(self.image_path, new_label)
+            self.image_path = self.parent_window.move_image_to_label(
+                self.image_path, new_label
+            )
 
 
 class AnnotatableCanvas(tk.Frame):
@@ -101,7 +105,9 @@ class AnnotatableCanvas(tk.Frame):
         self.orig_width: int = 1
         self.orig_height: int = 1
 
-        self.rect_items: List[Tuple[int, int, Tuple[float, float, float, float], str]] = []
+        self.rect_items: List[
+            Tuple[int, int, Tuple[float, float, float, float], str]
+        ] = []
         self.temp_rect_id: Optional[int] = None
         self.temp_start: Optional[Tuple[float, float]] = None
 
@@ -160,7 +166,9 @@ class AnnotatableCanvas(tk.Frame):
         offset_x = (canvas_w - new_w) // 2
         offset_y = (canvas_h - new_h) // 2
 
-        self.canvas_image_id = self.canvas.create_image(offset_x, offset_y, anchor="nw", image=self.tk_image)
+        self.canvas_image_id = self.canvas.create_image(
+            offset_x, offset_y, anchor="nw", image=self.tk_image
+        )
 
     def _redraw_all(self) -> None:
         """Redraw the image and all visible rectangles after a canvas change."""
@@ -235,13 +243,17 @@ class AnnotatableCanvas(tk.Frame):
         cy = oy + y * self.scale_ratio
         return cx, cy
 
-    def _draw_saved_rect(self, unscaled_rect: Tuple[float, float, float, float], label: str) -> None:
+    def _draw_saved_rect(
+        self, unscaled_rect: Tuple[float, float, float, float], label: str
+    ) -> None:
         """Draw a saved rectangle and label using original image coordinates."""
         x1, y1 = self._image_to_canvas(unscaled_rect[0], unscaled_rect[1])
         x2, y2 = self._image_to_canvas(unscaled_rect[2], unscaled_rect[3])
 
         rect_id = self.canvas.create_rectangle(x1, y1, x2, y2, outline="red", width=2)
-        text_id = self.canvas.create_text(x1, y1 - 15, text=label, fill="blue", anchor="nw")
+        text_id = self.canvas.create_text(
+            x1, y1 - 15, text=label, fill="blue", anchor="nw"
+        )
         self.rect_items.append((rect_id, text_id, unscaled_rect, label))
 
     # ------------------------------------------------------------------
@@ -251,8 +263,7 @@ class AnnotatableCanvas(tk.Frame):
         """Start drawing a temporary rectangle at the mouse position."""
         self.temp_start = (event.x, event.y)
         self.temp_rect_id = self.canvas.create_rectangle(
-            event.x, event.y, event.x, event.y,
-            outline="red", width=2
+            event.x, event.y, event.x, event.y, outline="red", width=2
         )
 
     def _on_left_drag(self, event) -> None:
@@ -291,13 +302,15 @@ class AnnotatableCanvas(tk.Frame):
         label = self.get_current_anno_label() or self.image_path.parent.name
 
         self.db.save_annotation(
-            str(self.image_path),
-            (ix1, iy1, ix2 - ix1, iy2 - iy1),
-            label
+            str(self.image_path), (ix1, iy1, ix2 - ix1, iy2 - iy1), label
         )
 
-        text_id = self.canvas.create_text(cx1, cy1 - 15, text=label, fill="blue", anchor="nw")
-        self.rect_items.append((self.temp_rect_id, text_id, (ix1, iy1, ix2, iy2), label))
+        text_id = self.canvas.create_text(
+            cx1, cy1 - 15, text=label, fill="blue", anchor="nw"
+        )
+        self.rect_items.append(
+            (self.temp_rect_id, text_id, (ix1, iy1, ix2, iy2), label)
+        )
 
         self.temp_rect_id = None
         self.temp_start = None
@@ -327,10 +340,7 @@ class AnnotatableCanvas(tk.Frame):
         rect_id, text_id, unscaled_rect, _ = self.rect_items[index]
         x1, y1, x2, y2 = unscaled_rect
 
-        self.db.delete_annotation(
-            str(self.image_path),
-            (x1, y1, x2 - x1, y2 - y1)
-        )
+        self.db.delete_annotation(str(self.image_path), (x1, y1, x2 - x1, y2 - y1))
 
         self.canvas.delete(rect_id)
         self.canvas.delete(text_id)
