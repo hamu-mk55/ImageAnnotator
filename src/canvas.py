@@ -26,28 +26,33 @@ class ImageWithControls(ttk.Frame):
 
         self.image_path: Optional[Path] = None
         self.label_list: List[str] = []
+        self.current_annotation_label: str = ""
 
         header_frame = ttk.Frame(self)
         header_frame.pack(fill=tk.X, padx=5, pady=5)
 
+        ttk.Label(header_frame, text="Filename:", width=16, anchor=tk.W).grid(
+            row=0, column=0, sticky=tk.W, padx=5, pady=2
+        )
         self.filename_label = ttk.Label(header_frame, text="")
-        self.filename_label.pack(side=tk.LEFT, padx=5)
+        self.filename_label.grid(row=0, column=1, sticky=tk.W, padx=5, pady=2)
 
-        self.combo_label = ttk.Combobox(header_frame, state="readonly")
-        self.combo_label.pack(side=tk.LEFT, padx=5)
-        self.combo_label.bind("<<ComboboxSelected>>", self._on_label_changed)
+        ttk.Label(header_frame, text="Change Label:", width=16, anchor=tk.W).grid(
+            row=1, column=0, sticky=tk.W, padx=5, pady=2
+        )
+        self.label_button_frame = ttk.Frame(header_frame)
+        self.label_button_frame.grid(row=1, column=1, sticky=tk.W, padx=5, pady=2)
 
-        anno_frame = ttk.Frame(self)
-        anno_frame.pack(fill=tk.X, padx=5, pady=5)
+        ttk.Label(header_frame, text="Annotation Label:", width=16, anchor=tk.W).grid(
+            row=2, column=0, sticky=tk.W, padx=5, pady=2
+        )
 
-        ttk.Label(anno_frame, text="Annotation Label:").pack(side=tk.LEFT, padx=5)
-
-        self.combo_anno = ttk.Combobox(anno_frame, state="readonly")
-        self.combo_anno.pack(side=tk.LEFT, padx=5)
+        self.annotation_button_frame = ttk.Frame(header_frame)
+        self.annotation_button_frame.grid(row=2, column=1, sticky=tk.W, padx=5, pady=2)
 
         self.view = AnnotatableCanvas(self, parent_window, db)
         self.view.pack(fill=tk.BOTH, expand=True)
-        self.view.get_current_anno_label = lambda: self.combo_anno.get()
+        self.view.get_current_anno_label = lambda: self.current_annotation_label
 
     def set_image_path(self, image_path: Path, label_list: List[str]) -> None:
         """Set the active image and refresh label selectors for it."""
@@ -56,31 +61,85 @@ class ImageWithControls(ttk.Frame):
 
         current_label = image_path.parent.name
 
-        self.combo_label["values"] = self.label_list
-        self.combo_label.set(current_label)
-
-        self.combo_anno["values"] = self.label_list
-        self.combo_anno.set(current_label)
+        self.current_annotation_label = current_label
 
         self.filename_label.config(text=image_path.name)
+        self._render_label_buttons(current_label)
+        self._render_annotation_buttons()
         self.view.set_image(image_path)
 
     def clear_annotations(self) -> None:
         """Clear all annotations for the currently displayed image."""
         self.view.clear_all_annotations()
 
-    def _on_label_changed(self, event=None) -> None:
-        """Move the current image when the image label selector changes."""
+    def clear_label_buttons(self) -> None:
+        """Clear label and annotation selection buttons."""
+        self._clear_buttons(self.label_button_frame)
+        self._clear_buttons(self.annotation_button_frame)
+        self.current_annotation_label = ""
+
+    def _render_label_buttons(self, current_label: str) -> None:
+        """Render image label change buttons."""
+        self._clear_buttons(self.label_button_frame)
+        for index, label in enumerate(self.label_list):
+            button = ttk.Button(
+                self.label_button_frame,
+                text=label,
+                command=lambda selected=label: self._on_label_selected(selected),
+            )
+            if label == current_label:
+                button.state(["disabled"])
+            self._grid_label_button(button, index)
+
+    def _render_annotation_buttons(self) -> None:
+        """Render annotation label selection buttons."""
+        self._clear_buttons(self.annotation_button_frame)
+        for index, label in enumerate(self.label_list):
+            button = ttk.Button(
+                self.annotation_button_frame,
+                text=label,
+                command=lambda selected=label: self._on_annotation_label_selected(
+                    selected
+                ),
+            )
+            if label == self.current_annotation_label:
+                button.state(["disabled"])
+            self._grid_label_button(button, index)
+
+    def _grid_label_button(self, button: ttk.Button, index: int) -> None:
+        """Place label buttons in one row, wrapping to two rows when needed."""
+        if len(self.label_list) > 6:
+            columns = max(1, (len(self.label_list) + 1) // 2)
+        else:
+            columns = max(1, len(self.label_list))
+
+        row = index // columns
+        column = index % columns
+        button.grid(row=row, column=column, sticky=tk.W, padx=(0, 5), pady=2)
+
+    def _clear_buttons(self, frame: ttk.Frame) -> None:
+        """Remove all buttons from a selector frame."""
+        for child in frame.winfo_children():
+            child.destroy()
+
+    def _on_label_selected(self, new_label: str) -> None:
+        """Move the current image when an image label button is selected."""
         if not self.image_path:
             return
 
-        new_label = self.combo_label.get()
         old_label = self.image_path.parent.name
 
         if new_label and new_label != old_label and new_label in self.label_list:
-            self.image_path = self.parent_window.move_image_to_label(
-                self.image_path, new_label
-            )
+            new_path = self.parent_window.move_image_to_label(self.image_path, new_label)
+            if new_path == self.image_path:
+                self._render_label_buttons(old_label)
+            else:
+                self.image_path = new_path
+
+    def _on_annotation_label_selected(self, new_label: str) -> None:
+        """Set the label used for newly drawn annotations."""
+        self.current_annotation_label = new_label
+        self._render_annotation_buttons()
 
 
 class AnnotatableCanvas(tk.Frame):
