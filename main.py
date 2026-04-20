@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 from __future__ import annotations
 
 import csv
@@ -39,9 +39,29 @@ class Annotator(tk.Tk):
 
         self.db = AnnotationDB("annotations.db")
 
+        self._init_menu()
         self._init_ui()
         self.bind("<Left>", lambda e: self._show_prev_image())
         self.bind("<Right>", lambda e: self._show_next_image())
+
+    def _init_menu(self) -> None:
+        """Create the application menu bar."""
+        menu_bar = tk.Menu(self)
+
+        file_menu = tk.Menu(menu_bar, tearoff=False)
+        file_menu.add_command(label="Close", command=self.destroy)
+        menu_bar.add_cascade(label="File", menu=file_menu)
+
+        import_menu = tk.Menu(menu_bar, tearoff=False)
+        import_menu.add_command(label="Annotation", command=self._import_annotations_csv)
+        menu_bar.add_cascade(label="Import", menu=import_menu)
+
+        export_menu = tk.Menu(menu_bar, tearoff=False)
+        export_menu.add_command(label="Label", command=self._export_labels_csv)
+        export_menu.add_command(label="Annotation", command=self._export_annotations_csv)
+        menu_bar.add_cascade(label="Export", menu=export_menu)
+
+        self.config(menu=menu_bar)
 
     def _init_ui(self) -> None:
         """Create the folder controls, label tree, and image display area."""
@@ -59,13 +79,18 @@ class Annotator(tk.Tk):
             ("Set image folder", self._choose_image_folder),
             ("Add Label", self._add_label),
             ("Clear Annotations", self._clear_current_annotations),
-            ("Export Labels", self._export_labels_csv),
-            ("Export Annotations", self._export_annotations_csv),
-            ("Import Annotations", self._import_annotations_csv),
         ]
 
         for text, cmd in buttons:
             ttk.Button(btn_frame, text=text, command=cmd).pack(fill=tk.X, pady=2)
+
+        label_select_frame = ttk.Frame(left_frame)
+        label_select_frame.pack(fill=tk.X, padx=5, pady=(5, 0))
+        ttk.Label(label_select_frame, text="Label:").pack(side=tk.LEFT)
+
+        self.label_combo = ttk.Combobox(label_select_frame, state="readonly")
+        self.label_combo.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(5, 0))
+        self.label_combo.bind("<<ComboboxSelected>>", self._on_label_combo_selected)
 
         self.label_tree = ttk.Treeview(left_frame, show="tree")
         self.label_tree.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
@@ -113,69 +138,65 @@ class Annotator(tk.Tk):
 
     def _remake_label_tree(self, preferred_selection=None) -> None:
         """
-        Rebuild the label tree while preserving expanded labels and selection.
+        Rebuild the file tree for the selected label.
 
         Args:
             preferred_selection: Optional item to select after rebuilding.
-                Use ("label", label) for a label node or
-                ("image", label, image_name) for an image node.
+                Use ("label", label) to select a label or
+                ("image", label, image_name) to select a file in a label.
         """
-        # 現在開いているラベルを保存
-        open_labels = set()
-        for item_id in self.label_tree.get_children():
-            label = self.label_tree.item(item_id, "text")
-            if self.label_tree.item(item_id, "open"):
-                open_labels.add(label)
+        labels = sorted(self.image_dict.keys(), key=str.lower)
+        self.label_combo["values"] = labels
 
-        # 現在選択中の項目を保存（preferred_selection が無いときの復元用）
-        selected_value = None
-        if preferred_selection is None:
+        selected_value = preferred_selection
+        selected_image_name = None
+        if selected_value is None:
             selected = self.label_tree.selection()
             if selected:
                 item_id = selected[0]
-                parent_id = self.label_tree.parent(item_id)
-                if parent_id:
-                    label = self.label_tree.item(parent_id, "text")
-                    image_name = self.label_tree.item(item_id, "text")
-                    selected_value = ("image", label, image_name)
-                else:
-                    label = self.label_tree.item(item_id, "text")
-                    selected_value = ("label", label)
-        else:
-            selected_value = preferred_selection
+                values = self.label_tree.item(item_id, "values")
+                if len(values) >= 3 and values[0] == "image":
+                    selected_value = ("image", values[1], values[2])
 
-        # 再構築
+        label_to_show = self.current_label
+        if selected_value:
+            if selected_value[0] == "label":
+                label_to_show = selected_value[1]
+            elif selected_value[0] == "image":
+                label_to_show = selected_value[1]
+                selected_image_name = selected_value[2]
+
+        if label_to_show not in self.image_dict:
+            label_to_show = labels[0] if labels else None
+
         self.label_tree.delete(*self.label_tree.get_children())
 
+        if label_to_show is None:
+            self.current_label = None
+            self.current_images = []
+            self.current_index = 0
+            self.label_combo.set("")
+            return
+
+        self.current_label = label_to_show
+        self.current_images = self.image_dict.get(label_to_show, [])
+        self.label_combo.set(label_to_show)
+
         restore_selection_id = None
-
-        for label in sorted(self.image_dict.keys(), key=str.lower):
-            should_open = label in open_labels
-
-            # 優先選択先がこのラベル配下なら開く
-            if selected_value:
-                if selected_value[0] == "label" and selected_value[1] == label:
-                    should_open = True
-                elif selected_value[0] == "image" and selected_value[1] == label:
-                    should_open = True
-
-            parent_id = self.label_tree.insert(
-                "", "end", text=label, values=("label", label), open=should_open
+        for index, img_path in enumerate(self.current_images):
+            child_id = self.label_tree.insert(
+                "",
+                "end",
+                text=img_path.name,
+                values=("image", label_to_show, img_path.name),
             )
+            if selected_image_name == img_path.name:
+                restore_selection_id = child_id
+                self.current_index = index
 
-            if selected_value == ("label", label):
-                restore_selection_id = parent_id
-
-            for img_path in self.image_dict[label]:
-                child_id = self.label_tree.insert(
-                    parent_id,
-                    "end",
-                    text=img_path.name,
-                    values=("image", label, img_path.name),
-                )
-
-                if selected_value == ("image", label, img_path.name):
-                    restore_selection_id = child_id
+        if restore_selection_id is None and self.current_images:
+            restore_selection_id = self.label_tree.get_children()[0]
+            self.current_index = 0
 
         if restore_selection_id:
             self.label_tree.selection_set(restore_selection_id)
@@ -198,30 +219,38 @@ class Annotator(tk.Tk):
     # ------------------------------------------------------------------
     # Navigation
     # ------------------------------------------------------------------
+    def _on_label_combo_selected(self, event=None) -> None:
+        """Show files for the selected label."""
+        label = self.label_combo.get()
+        if not label:
+            return
+
+        self.current_label = label
+        self.current_images = self.image_dict.get(label, [])
+        self.current_index = 0
+        self._remake_label_tree(preferred_selection=("label", label))
+        self._update_image_display()
+
     def _on_label_item_clicked(self, event=None) -> None:
-        """Handle tree selection changes and display the selected image."""
+        """Handle file selection changes and display the selected image."""
         selected = self.label_tree.selection()
         if not selected:
             return
 
         item_id = selected[0]
-        parent_id = self.label_tree.parent(item_id)
+        values = self.label_tree.item(item_id, "values")
+        if len(values) < 3 or values[0] != "image":
+            return
 
-        if parent_id:
-            label = self.label_tree.item(parent_id, "text")
-            image_name = self.label_tree.item(item_id, "text")
-            full_path = self.root_folder / label / image_name
+        label = values[1]
+        image_name = values[2]
+        full_path = self.root_folder / label / image_name
 
-            self.current_label = label
-            self.current_images = self.image_dict.get(label, [])
-            try:
-                self.current_index = self.current_images.index(full_path)
-            except ValueError:
-                self.current_index = 0
-        else:
-            label = self.label_tree.item(item_id, "text")
-            self.current_label = label
-            self.current_images = self.image_dict.get(label, [])
+        self.current_label = label
+        self.current_images = self.image_dict.get(label, [])
+        try:
+            self.current_index = self.current_images.index(full_path)
+        except ValueError:
             self.current_index = 0
 
         self._update_image_display()
@@ -241,11 +270,20 @@ class Annotator(tk.Tk):
     def _update_image_display(self) -> None:
         """Display the current image and refresh the available label choices."""
         if not self.current_images:
+            self._clear_image_display()
             return
 
         image_path = self.current_images[self.current_index]
         labels = sorted(self.image_dict.keys(), key=str.lower)
         self.image_with_controls.set_image_path(image_path, labels)
+
+    def _clear_image_display(self) -> None:
+        """Clear the image display and label selector state."""
+        self.image_with_controls.view.canvas.delete("all")
+        self.image_with_controls.view.rect_items.clear()
+        self.image_with_controls.image_path = None
+        self.image_with_controls.filename_label.config(text="")
+        self.image_with_controls.clear_label_buttons()
 
     # ------------------------------------------------------------------
     # File Move / Label Change
@@ -277,17 +315,15 @@ class Annotator(tk.Tk):
             )
             return image_path
 
-        # 旧ラベル内での元の位置を記録
+        # 譌ｧ繝ｩ繝吶Ν蜀・〒縺ｮ蜈・・菴咲ｽｮ繧定ｨ倬鹸
         old_list = self.image_dict.get(old_label, [])
         try:
             old_index = old_list.index(image_path)
         except ValueError:
             old_index = 0
 
-        # ファイル移動
         image_path.replace(new_path)
 
-        # image_dict 更新
         if image_path in old_list:
             old_list.remove(image_path)
 
@@ -295,40 +331,24 @@ class Annotator(tk.Tk):
         self.image_dict[new_label].append(new_path)
         self.image_dict[new_label].sort(key=lambda p: p.name.lower())
 
-        # DB側の画像ラベル更新
         self.db.update_label(str(new_path))
 
-        # 移動後は old_label 側の次画像を表示し続ける
         self.current_label = old_label
         self.current_images = self.image_dict.get(old_label, [])
-
-        preferred_selection = None
 
         if self.current_images:
             self.current_index = min(old_index, len(self.current_images) - 1)
             next_image = self.current_images[self.current_index]
-            preferred_selection = ("image", old_label, next_image.name)
-
-            # Treeview再構築 + 次画像ノードを選択
-            self._remake_label_tree(preferred_selection=preferred_selection)
-
-            # 画面表示も次画像へ
+            self._remake_label_tree(
+                preferred_selection=("image", old_label, next_image.name)
+            )
             self._update_image_display()
         else:
-            # 旧ラベルが空になった場合は old_label ノードを選択
-            preferred_selection = ("label", old_label)
-            self._remake_label_tree(preferred_selection=preferred_selection)
-
             self.current_index = 0
             self.current_label = old_label
             self.current_images = []
-
-            self.image_with_controls.view.canvas.delete("all")
-            self.image_with_controls.view.rect_items.clear()
-            self.image_with_controls.image_path = None
-            self.image_with_controls.filename_label.config(text="")
-            self.image_with_controls.combo_label.set("")
-            self.image_with_controls.combo_anno.set("")
+            self._remake_label_tree(preferred_selection=("label", old_label))
+            self._clear_image_display()
 
         return new_path
 
